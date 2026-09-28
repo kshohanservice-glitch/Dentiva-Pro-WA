@@ -1,0 +1,37 @@
+/* UI fonts — Inter (Latin) + Noto Sans Bengali (Bengali + ৳). OFL licensed. */
+@font-face {
+  font-family: 'Dentiva UI';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../resources/fonts/Inter-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Dentiva UI';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../resources/fonts/Inter-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Dentiva BN';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../resources/fonts/NotoSansBengali-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Dentiva BN';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../resources/fonts/NotoSansBengali-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Dentiva BN';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../resources/fonts/NotoSansBengali-Latin-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+09F3;
+}

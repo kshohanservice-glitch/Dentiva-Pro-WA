@@ -1,0 +1,151 @@
+name: Release
+
+# Final release pipeline for Dentiva Pro v1.0.0 (Windows, offline desktop app).
+#
+#   1. gates       — typecheck (renderer + main), lint, source/license audit,
+#                    full offline test suite (RBAC matrix, financial,
+#                    inventory, backup/restore, print HTML)
+#   2. build       — Windows build on windows-latest: compile main + renderer,
+#                    package NSIS Setup + Portable EXE, structural smoke test
+#                    of the artifacts, then keep dist/ as the mandatory
+#                    fallback location for the validated distributables
+#   3. release     — publish a GitHub Release with the EXEs (preferred path)
+#                    + SHA256SUMS.txt. If the release cannot be created, the
+#                    dist/ artifacts uploaded in step 2 remain downloadable.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  gates:
+    name: '1. Quality gates (typecheck · lint · audit · tests)'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck (renderer + main process)
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Source & dependency license audit
+        run: npm run scan
+      - name: Test suite (RBAC matrix, financial, inventory, backup, print)
+        run: npm test
+
+  build:
+    name: '2. Build Windows artifacts + smoke test'
+    needs: gates
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies (native module builds for Electron ABI)
+        run: npm ci
+      - name: Compile main process + renderer
+        run: npm run build
+      - name: Package NSIS Setup + Portable EXE
+        run: npx electron-builder --win --x64
+      - name: Smoke test the packaged artifacts (PE, asar, schema, fonts)
+        run: node scripts/smoke.mjs
+      - name: Keep validated dist/ artifacts (mandatory fallback if no GitHub Release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dentiva-pro-dist
+          path: |
+            dist/DentivaPro-Setup-*.exe
+            dist/DentivaPro-Portable-*.exe
+            dist/SHA256SUMS.txt
+          retention-days: 90
+          if-no-files-found: error
+
+  release:
+    name: '3. Publish GitHub Release'
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download validated artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dentiva-pro-dist
+          path: release-files
+      - name: Create GitHub Release (preferred distribution path)
+        id: ghrelease
+        uses: softprops/action-gh-release@v2
+        continue-on-error: true
+        with:
+          files: |
+            release-files/DentivaPro-Setup-*.exe
+            release-files/DentivaPro-Portable-*.exe
+            release-files/SHA256SUMS.txt
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+          body: |
+            # Dentiva Pro v1.0.0 — Final Release
+
+            Premium **offline** dental practice management software for clinics in Bangladesh.
+            Everything runs on the local machine: local database, local printing, local backups.
+            No internet connection, no cloud, no subscriptions — ever.
+
+            ## What's inside
+            - **Setup installer** (`DentivaPro-Setup-1.0.0.exe`) — recommended
+            - **Portable EXE** (`DentivaPro-Portable-1.0.0.exe`) — run from any folder/USB
+            - **SHA256SUMS.txt** — verify file integrity after download
+
+            ## Getting started
+            1. Run the Setup installer and double-click the **Dentiva Pro** shortcut.
+            2. Activate with your 16-digit activation code.
+            3. Complete the first-run setup wizard (clinic profile, lead dentist, admin account).
+            4. Log in and go to work. Data lives in `%APPDATA%\Dentiva Pro`.
+
+            ## Highlights
+            - Patients with full clinical record, dental chart (FDI + Universal, adult/pediatric)
+            - Appointments, walk-in queue, visits, treatment catalog
+            - Prescriptions with C/C · O/E · R/E, advice, medicines, signature — A4/A5/thermal print + PDF
+            - Immutable invoices & payments (Cash, Bank, Card, bKash, Nagad, Rocket, Upay, Other) in exact ৳ paisa math
+            - Income/expense accounting with reports, receivables
+            - Inventory with stock in/out, low-stock & expiry alerts
+            - Staff, suppliers, referrals, attachments
+            - Granular RBAC with financial restrictions enforced at the service layer, audit log, auto-lock
+            - One-click professional backups (zip + manifest + SHA-256) with validated, safety-backup-first restore
+            - English UI with full Bengali Unicode in records and prints (bundled OFL fonts)
+
+            ## System requirements
+            Windows 10/11 (64-bit). No internet required after activation.
+
+            ## Integrity
+            Verify your download before installing:
+            `certutil -hashfile DentivaPro-Setup-1.0.0.exe SHA256` and compare with SHA256SUMS.txt.
+
+            ## Third-party components
+            Open-source components are listed with their licenses in `THIRD_PARTY_NOTICES.md` (shipped with the repository).
+
+            Developed by **Shohan Khan** — helloiamshohan@gmail.com
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Report fallback state if the release could not be created
+        if: steps.ghrelease.outcome == 'failure'
+        run: |
+          echo "## GitHub Release could not be created" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "The validated distributables are available as the **dentiva-pro-dist** Actions artifact" >> "$GITHUB_STEP_SUMMARY"
+          echo "(this is the mandatory dist/ fallback). Download it from this run's Artifacts section." >> "$GITHUB_STEP_SUMMARY"
