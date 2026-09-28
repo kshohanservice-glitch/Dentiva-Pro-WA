@@ -61,7 +61,18 @@ jobs:
       - name: Compile main process + renderer
         run: npm run build
       - name: Package NSIS Setup + Portable EXE
-        run: npx electron-builder --win --x64
+        env:
+          DEBUG: 'electron-builder:*,app-builder:*,@electron/rebuild:*'
+        run: |
+          npx electron-builder --win --x64 2>&1 | Tee-Object -FilePath eb-build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Surface packaging failure details (log tail into job summary)
+        if: failure()
+        run: |
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '## electron-builder failure (last 120 lines)'
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```'
+          Get-Content eb-build.log -Tail 120 | Add-Content -Path $env:GITHUB_STEP_SUMMARY
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```'
       - name: Smoke test the packaged artifacts (PE, asar, schema, fonts)
         run: node scripts/smoke.mjs
       - name: Keep validated dist/ artifacts (mandatory fallback if no GitHub Release)
